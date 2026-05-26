@@ -1,0 +1,5 @@
+services:
+  lumen:
+    build: .
+    image: lumen-lang:local
+    command: ["/opt/lumen/examples/counter.lum"]
