@@ -1,9 +1,9 @@
+#include "lexer/lexer.h"
+
 #include <gtest/gtest.h>
 
 #include <string>
 #include <vector>
-
-#include "lexer/lexer.h"
 
 using namespace lumen;
 
@@ -15,7 +15,8 @@ static std::vector<Token> tok(const std::string& s) {
 static std::vector<TokenKind> kinds(const std::vector<Token>& ts) {
   std::vector<TokenKind> ks;
   ks.reserve(ts.size());
-  for (auto& t : ts) ks.push_back(t.kind);
+  for (auto& t : ts)
+    ks.push_back(t.kind);
   return ks;
 }
 
@@ -27,24 +28,19 @@ TEST(Lexer, EmptyInputProducesOnlyEof) {
 
 TEST(Lexer, SingleCharPunctuation) {
   auto ts = tok("(){},.-+;*/");
-  std::vector<TokenKind> exp = {
-      TokenKind::LeftParen, TokenKind::RightParen,
-      TokenKind::LeftBrace, TokenKind::RightBrace,
-      TokenKind::Comma,     TokenKind::Dot,
-      TokenKind::Minus,     TokenKind::Plus,
-      TokenKind::Semicolon, TokenKind::Star,
-      TokenKind::Slash,     TokenKind::Eof};
+  std::vector<TokenKind> exp = {TokenKind::LeftParen,  TokenKind::RightParen, TokenKind::LeftBrace,
+                                TokenKind::RightBrace, TokenKind::Comma,      TokenKind::Dot,
+                                TokenKind::Minus,      TokenKind::Plus,       TokenKind::Semicolon,
+                                TokenKind::Star,       TokenKind::Slash,      TokenKind::Eof};
   EXPECT_EQ(kinds(ts), exp);
 }
 
 TEST(Lexer, TwoCharOperators) {
   auto ts = tok("!= == >= <= = ! > <");
   std::vector<TokenKind> exp = {
-      TokenKind::BangEqual,    TokenKind::EqualEqual,
-      TokenKind::GreaterEqual, TokenKind::LessEqual,
-      TokenKind::Equal,        TokenKind::Bang,
-      TokenKind::Greater,      TokenKind::Less,
-      TokenKind::Eof};
+      TokenKind::BangEqual, TokenKind::EqualEqual, TokenKind::GreaterEqual,
+      TokenKind::LessEqual, TokenKind::Equal,      TokenKind::Bang,
+      TokenKind::Greater,   TokenKind::Less,       TokenKind::Eof};
   EXPECT_EQ(kinds(ts), exp);
 }
 
@@ -107,11 +103,10 @@ TEST(Lexer, Identifier) {
 TEST(Lexer, AllKeywords) {
   auto ts = tok("and class else false for fun if nil or print return super this true var while");
   std::vector<TokenKind> exp = {
-      TokenKind::And,  TokenKind::Class,  TokenKind::Else,  TokenKind::False,
-      TokenKind::For,  TokenKind::Fun,    TokenKind::If,    TokenKind::Nil,
-      TokenKind::Or,   TokenKind::Print,  TokenKind::Return,TokenKind::Super,
-      TokenKind::This, TokenKind::True,   TokenKind::Var,   TokenKind::While,
-      TokenKind::Eof};
+      TokenKind::And,    TokenKind::Class, TokenKind::Else, TokenKind::False, TokenKind::For,
+      TokenKind::Fun,    TokenKind::If,    TokenKind::Nil,  TokenKind::Or,    TokenKind::Print,
+      TokenKind::Return, TokenKind::Super, TokenKind::This, TokenKind::True,  TokenKind::Var,
+      TokenKind::While,  TokenKind::Eof};
   EXPECT_EQ(kinds(ts), exp);
 }
 
@@ -142,11 +137,10 @@ TEST(Lexer, UnexpectedCharacterReportsError) {
 
 TEST(Lexer, MixedExpressionTokens) {
   auto ts = tok("var x = 1 + 2 * 3;");
-  std::vector<TokenKind> exp = {
-      TokenKind::Var,    TokenKind::Identifier, TokenKind::Equal,
-      TokenKind::Number, TokenKind::Plus,       TokenKind::Number,
-      TokenKind::Star,   TokenKind::Number,     TokenKind::Semicolon,
-      TokenKind::Eof};
+  std::vector<TokenKind> exp = {TokenKind::Var,    TokenKind::Identifier, TokenKind::Equal,
+                                TokenKind::Number, TokenKind::Plus,       TokenKind::Number,
+                                TokenKind::Star,   TokenKind::Number,     TokenKind::Semicolon,
+                                TokenKind::Eof};
   EXPECT_EQ(kinds(ts), exp);
 }
 
