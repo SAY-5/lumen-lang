@@ -1,0 +1,5 @@
+{
+  "fib30": {"seconds": 25.4645, "ops_per_sec": 105737, "peak_kb": 1664},
+  "bubble_sort1000": {"seconds": 0.00904075, "ops_per_sec": 1.1061e+08, "peak_kb": 2064},
+  "mandelbrot40": {"seconds": 0.0108625, "ops_per_sec": 2.94593e+06, "peak_kb": 2112}
+}

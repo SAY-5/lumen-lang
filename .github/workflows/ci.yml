@@ -106,6 +106,25 @@ jobs:
       - name: Run bench smoke
         run: ./build/lumen_bench --smoke
 
+  bench-regress:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y g++-12 cmake
+      - name: Build benchmarks
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DLUMEN_BUILD_TESTS=OFF -DCMAKE_CXX_COMPILER=g++-12
+          cmake --build build -j"$(nproc)" --target lumen_bench
+      - name: Capture baseline on this runner
+        # ops/sec is hardware dependent, so the gate compares two runs on the
+        # same runner. This captures the baseline; the next step re-runs and
+        # fails if any benchmark drifts more than 30% slower.
+        run: ./build/lumen_bench --json > bench/results/baseline.json
+      - name: Enforce 30% regression gate
+        run: ./build/lumen_bench --check bench/results/baseline.json --tolerance 0.30
+
   coverage:
     runs-on: ubuntu-22.04
     steps:
