@@ -27,9 +27,12 @@
 #include <sys/resource.h>
 #endif
 
+#include "bytecode/compiler.h"
+#include "bytecode/vm.h"
 #include "eval/interpreter.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
+#include "repl/driver.h"  // for lumen::Engine
 
 namespace {
 
@@ -131,7 +134,7 @@ long peak_rss_kb() {
   return 0;
 }
 
-Result run_one(const Benchmark& b) {
+Result run_one(const Benchmark& b, lumen::Engine engine) {
   using clock = std::chrono::steady_clock;
   lumen::Lexer lexer(b.source);
   auto tokens = lexer.scan_tokens();
@@ -143,11 +146,26 @@ Result run_one(const Benchmark& b) {
   }
 
   auto start = clock::now();
-  lumen::Interpreter interp;
-  bool ok = interp.interpret(stmts);
+  bool ok = true;
+  std::string err;
+  if (engine == lumen::Engine::Bytecode) {
+    lumen::Compiler compiler;
+    lumen::FunctionObj script = compiler.compile(stmts);
+    if (compiler.had_error()) {
+      std::cerr << "bench: compile error in " << b.name << "\n";
+      std::exit(2);
+    }
+    lumen::VM vm;
+    ok = vm.run(script) == lumen::InterpretResult::Ok;
+    err = vm.error_message();
+  } else {
+    lumen::Interpreter interp;
+    ok = interp.interpret(stmts);
+    err = interp.error_message();
+  }
   auto end = clock::now();
   if (!ok) {
-    std::cerr << "bench: runtime error in " << b.name << ": " << interp.error_message() << "\n";
+    std::cerr << "bench: runtime error in " << b.name << ": " << err << "\n";
     std::exit(2);
   }
 
@@ -224,6 +242,7 @@ int main(int argc, char** argv) {
   bool json = false;
   bool check = false;
   bool smoke = false;
+  lumen::Engine engine = lumen::Engine::Tree;
   std::string baseline;
   double tolerance = 0.30;
 
@@ -233,6 +252,10 @@ int main(int argc, char** argv) {
       json = true;
     } else if (arg == "--smoke") {
       smoke = true;
+    } else if (arg == "--engine=tree") {
+      engine = lumen::Engine::Tree;
+    } else if (arg == "--engine=bytecode") {
+      engine = lumen::Engine::Bytecode;
     } else if (arg == "--check" && i + 1 < argc) {
       check = true;
       baseline = argv[++i];
@@ -243,7 +266,7 @@ int main(int argc, char** argv) {
 
   std::vector<Result> results;
   for (const auto& b : benchmarks(smoke)) {
-    results.push_back(run_one(b));
+    results.push_back(run_one(b, engine));
   }
 
   if (check) {

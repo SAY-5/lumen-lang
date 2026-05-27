@@ -34,11 +34,17 @@ jobs:
         run: cmake --build build -j"$(nproc)"
       - name: Test
         run: ctest --test-dir build --output-on-failure
-      - name: Run examples
+      - name: Run examples under both engines
         run: |
           for ex in examples/*.lum; do
             echo "== $ex =="
-            ./build/lumen "$ex"
+            tree_out=$(./build/lumen --engine=tree "$ex")
+            bc_out=$(./build/lumen --engine=bytecode "$ex")
+            if [ "$tree_out" != "$bc_out" ]; then
+              echo "engine mismatch for $ex"
+              exit 1
+            fi
+            printf '%s\n' "$tree_out"
           done
 
   build-clang:

@@ -5,6 +5,8 @@
 #include <iostream>
 #include <sstream>
 
+#include "bytecode/compiler.h"
+#include "bytecode/vm.h"
 #include "eval/interpreter.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
@@ -38,9 +40,24 @@ int run_source(const std::string& source, Engine engine) {
     return 65;
   }
 
-  // The bytecode engine is selected at the call site in v3; until then both
-  // engines share the tree-walking evaluator so behaviour is identical.
-  (void)engine;
+  if (engine == Engine::Bytecode) {
+    Compiler compiler;
+    FunctionObj script = compiler.compile(statements);
+    if (compiler.had_error()) {
+      report(compiler.errors());
+      return 65;
+    }
+    VM vm;
+    InterpretResult result = vm.run(script);
+    std::cout << vm.output();
+    std::cout.flush();
+    if (result != InterpretResult::Ok) {
+      std::cerr << vm.error_message() << "\n";
+      return 70;
+    }
+    return 0;
+  }
+
   Interpreter interp;
   bool ok = interp.interpret(statements);
   std::cout << interp.output();
