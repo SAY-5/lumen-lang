@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "bytecode/chunk.h"
+#include "bytecode/gc.h"
 
 namespace lumen {
 
@@ -18,19 +19,17 @@ struct ObjInstance;
 struct ObjBoundMethod;
 struct ObjNative;
 
-using ClosureObj = std::shared_ptr<ObjClosure>;
-using UpvalueObj = std::shared_ptr<ObjUpvalue>;
-using ClassObj = std::shared_ptr<ObjClass>;
-using InstanceObj = std::shared_ptr<ObjInstance>;
-using BoundMethodObj = std::shared_ptr<ObjBoundMethod>;
+// Runtime objects that can form reference cycles are garbage collected and held
+// by raw pointer (the collector owns them). Functions and natives are acyclic
+// and rooted by the constant pool, so they stay shared_ptr.
 using NativeObj = std::shared_ptr<ObjNative>;
 
 // The VM's runtime value. nil is std::monostate.
-using VmValue = std::variant<std::monostate, double, bool, std::string, ClosureObj, ClassObj,
-                             InstanceObj, BoundMethodObj, NativeObj>;
+using VmValue = std::variant<std::monostate, double, bool, std::string, ObjClosure*, ObjClass*,
+                             ObjInstance*, ObjBoundMethod*, NativeObj>;
 
 // A compiled function: its bytecode chunk, arity, name, and the number of
-// upvalues it captures.
+// upvalues it captures. Owned by shared_ptr (never collected).
 struct ObjFunction {
   Chunk chunk;
   int arity = 0;
@@ -41,7 +40,9 @@ struct ObjFunction {
 // A captured variable. While the enclosing frame is live the upvalue points at
 // a stack slot (open); once that frame returns the value is moved inline
 // (closed) so the closure keeps working.
-struct ObjUpvalue {
+struct ObjUpvalue : Obj {
+  ObjUpvalue() : Obj(ObjType::Upvalue) {
+  }
   VmValue* location = nullptr;  // points into the VM stack while open
   VmValue closed;               // holds the value once closed
   bool is_closed = false;
@@ -58,27 +59,35 @@ struct ObjUpvalue {
 };
 
 // A function paired with the upvalues it closed over.
-struct ObjClosure {
+struct ObjClosure : Obj {
+  ObjClosure() : Obj(ObjType::Closure) {
+  }
   FunctionObj function;
-  std::vector<UpvalueObj> upvalues;
+  std::vector<ObjUpvalue*> upvalues;
 };
 
 // A class with its method table (methods are closures).
-struct ObjClass {
+struct ObjClass : Obj {
+  ObjClass() : Obj(ObjType::Class) {
+  }
   std::string name;
-  std::unordered_map<std::string, ClosureObj> methods;
+  std::unordered_map<std::string, ObjClosure*> methods;
 };
 
 // A class instance with its mutable fields.
-struct ObjInstance {
-  ClassObj klass;
+struct ObjInstance : Obj {
+  ObjInstance() : Obj(ObjType::Instance) {
+  }
+  ObjClass* klass = nullptr;
   std::unordered_map<std::string, VmValue> fields;
 };
 
 // A method closure bound to the instance it was accessed on.
-struct ObjBoundMethod {
+struct ObjBoundMethod : Obj {
+  ObjBoundMethod() : Obj(ObjType::BoundMethod) {
+  }
   VmValue receiver;
-  ClosureObj method;
+  ObjClosure* method = nullptr;
 };
 
 // A builtin implemented in C++.

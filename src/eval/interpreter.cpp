@@ -37,6 +37,12 @@ Interpreter::Interpreter() {
                                   double s = std::chrono::duration<double>(now).count();
                                   return s;
                                 })));
+  // Native: gc() is a no-op here. The tree-walker relies on reference counting
+  // (shared_ptr) so there is nothing to trigger explicitly; the builtin exists
+  // so programs run identically under both engines. The bytecode VM's gc()
+  // performs a real mark-and-sweep collection.
+  globals_->define("gc", CallablePtr(std::make_shared<NativeFunction>(
+                             "gc", 0, [](const std::vector<Value>&) -> Value { return 0.0; })));
 }
 
 bool Interpreter::interpret(const std::vector<StmtPtr>& statements) {

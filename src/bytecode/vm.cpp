@@ -17,9 +17,16 @@ constexpr std::size_t kFramesMax = 1024;
 VM::VM() {
   stack_.reserve(kStackMax);
   frames_.reserve(kFramesMax);
+  gc_ = std::make_unique<GarbageCollector>(*this);
+
   define_native("clock", 0, [](const std::vector<VmValue>&) -> VmValue {
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration<double>(now).count();
+  });
+  // gc() forces a collection and returns the number of objects still live.
+  define_native("gc", 0, [this](const std::vector<VmValue>&) -> VmValue {
+    gc_->collect();
+    return static_cast<double>(gc_->live_count());
   });
 }
 
@@ -46,14 +53,14 @@ void VM::runtime_error(const std::string& message) {
 }
 
 InterpretResult VM::run(const FunctionObj& script) {
-  auto closure = std::make_shared<ObjClosure>();
+  ObjClosure* closure = gc_->allocate<ObjClosure>();
   closure->function = script;
   push(closure);
   call(closure, 0);
   return execute();
 }
 
-bool VM::call(const ClosureObj& closure, int arg_count) {
+bool VM::call(ObjClosure* closure, int arg_count) {
   if (arg_count != closure->function->arity) {
     runtime_error("expected " + std::to_string(closure->function->arity) + " arguments but got " +
                   std::to_string(arg_count));
@@ -72,17 +79,17 @@ bool VM::call(const ClosureObj& closure, int arg_count) {
 }
 
 bool VM::call_value(const VmValue& callee, int arg_count) {
-  if (std::holds_alternative<ClosureObj>(callee)) {
-    return call(std::get<ClosureObj>(callee), arg_count);
+  if (std::holds_alternative<ObjClosure*>(callee)) {
+    return call(std::get<ObjClosure*>(callee), arg_count);
   }
-  if (std::holds_alternative<BoundMethodObj>(callee)) {
-    auto bound = std::get<BoundMethodObj>(callee);
+  if (std::holds_alternative<ObjBoundMethod*>(callee)) {
+    auto* bound = std::get<ObjBoundMethod*>(callee);
     stack_[stack_.size() - arg_count - 1] = bound->receiver;  // bind 'this' in slot 0
     return call(bound->method, arg_count);
   }
-  if (std::holds_alternative<ClassObj>(callee)) {
-    auto klass = std::get<ClassObj>(callee);
-    auto instance = std::make_shared<ObjInstance>();
+  if (std::holds_alternative<ObjClass*>(callee)) {
+    auto* klass = std::get<ObjClass*>(callee);
+    ObjInstance* instance = gc_->allocate<ObjInstance>();
     instance->klass = klass;
     stack_[stack_.size() - arg_count - 1] = instance;
     auto it = klass->methods.find("init");
@@ -112,13 +119,13 @@ bool VM::call_value(const VmValue& callee, int arg_count) {
   return false;
 }
 
-bool VM::bind_method(const ClassObj& klass, const std::string& name) {
+bool VM::bind_method(ObjClass* klass, const std::string& name) {
   auto it = klass->methods.find(name);
   if (it == klass->methods.end()) {
     runtime_error("undefined property '" + name + "'");
     return false;
   }
-  auto bound = std::make_shared<ObjBoundMethod>();
+  ObjBoundMethod* bound = gc_->allocate<ObjBoundMethod>();
   bound->receiver = peek(0);
   bound->method = it->second;
   pop();
@@ -126,7 +133,7 @@ bool VM::bind_method(const ClassObj& klass, const std::string& name) {
   return true;
 }
 
-bool VM::invoke_from_class(const ClassObj& klass, const std::string& name, int arg_count) {
+bool VM::invoke_from_class(ObjClass* klass, const std::string& name, int arg_count) {
   auto it = klass->methods.find(name);
   if (it == klass->methods.end()) {
     runtime_error("undefined property '" + name + "'");
@@ -137,11 +144,11 @@ bool VM::invoke_from_class(const ClassObj& klass, const std::string& name, int a
 
 bool VM::invoke(const std::string& name, int arg_count) {
   VmValue receiver = peek(arg_count);
-  if (!std::holds_alternative<InstanceObj>(receiver)) {
+  if (!std::holds_alternative<ObjInstance*>(receiver)) {
     runtime_error("only instances have methods");
     return false;
   }
-  auto instance = std::get<InstanceObj>(receiver);
+  auto* instance = std::get<ObjInstance*>(receiver);
   auto field = instance->fields.find(name);
   if (field != instance->fields.end()) {
     stack_[stack_.size() - arg_count - 1] = field->second;
@@ -150,12 +157,12 @@ bool VM::invoke(const std::string& name, int arg_count) {
   return invoke_from_class(instance->klass, name, arg_count);
 }
 
-UpvalueObj VM::capture_upvalue(VmValue* local) {
-  for (const auto& uv : open_upvalues_) {
+ObjUpvalue* VM::capture_upvalue(VmValue* local) {
+  for (auto* uv : open_upvalues_) {
     if (uv->location == local)
       return uv;
   }
-  auto created = std::make_shared<ObjUpvalue>();
+  ObjUpvalue* created = gc_->allocate<ObjUpvalue>();
   created->location = local;
   open_upvalues_.push_back(created);
   return created;
@@ -192,6 +199,11 @@ InterpretResult VM::execute() {
   };
 
   while (true) {
+    // Instruction boundaries are GC safe points: every live value is reachable
+    // from a root (stack, frame, globals, open upvalues), nothing is mid-flight.
+    if (gc_->should_collect())
+      gc_->collect();
+
     OpCode op = static_cast<OpCode>(read_byte());
     switch (op) {
       case OpCode::Constant: {
@@ -265,11 +277,11 @@ InterpretResult VM::execute() {
         break;
       }
       case OpCode::GetProperty: {
-        if (!std::holds_alternative<InstanceObj>(peek(0))) {
+        if (!std::holds_alternative<ObjInstance*>(peek(0))) {
           runtime_error("only instances have properties");
           return InterpretResult::RuntimeError;
         }
-        auto instance = std::get<InstanceObj>(peek(0));
+        auto instance = std::get<ObjInstance*>(peek(0));
         std::string name = read_string();
         auto field = instance->fields.find(name);
         if (field != instance->fields.end()) {
@@ -282,11 +294,11 @@ InterpretResult VM::execute() {
         break;
       }
       case OpCode::SetProperty: {
-        if (!std::holds_alternative<InstanceObj>(peek(1))) {
+        if (!std::holds_alternative<ObjInstance*>(peek(1))) {
           runtime_error("only instances have fields");
           return InterpretResult::RuntimeError;
         }
-        auto instance = std::get<InstanceObj>(peek(1));
+        auto instance = std::get<ObjInstance*>(peek(1));
         std::string name = read_string();
         VmValue value = peek(0);
         instance->fields[name] = value;
@@ -297,7 +309,7 @@ InterpretResult VM::execute() {
       }
       case OpCode::GetSuper: {
         std::string name = read_string();
-        auto superclass = std::get<ClassObj>(pop());
+        auto superclass = std::get<ObjClass*>(pop());
         if (!bind_method(superclass, name))
           return InterpretResult::RuntimeError;
         break;
@@ -406,7 +418,7 @@ InterpretResult VM::execute() {
       case OpCode::SuperInvoke: {
         std::string method = read_string();
         int arg_count = read_byte();
-        auto superclass = std::get<ClassObj>(pop());
+        auto superclass = std::get<ObjClass*>(pop());
         if (!invoke_from_class(superclass, method, arg_count)) {
           return InterpretResult::RuntimeError;
         }
@@ -415,7 +427,7 @@ InterpretResult VM::execute() {
       }
       case OpCode::Closure: {
         auto fn = std::get<FunctionObj>(read_constant());
-        auto closure = std::make_shared<ObjClosure>();
+        ObjClosure* closure = gc_->allocate<ObjClosure>();
         closure->function = fn;
         closure->upvalues.resize(fn->upvalue_count);
         for (int i = 0; i < fn->upvalue_count; ++i) {
@@ -450,18 +462,18 @@ InterpretResult VM::execute() {
         break;
       }
       case OpCode::Class: {
-        auto klass = std::make_shared<ObjClass>();
+        ObjClass* klass = gc_->allocate<ObjClass>();
         klass->name = read_string();
         push(klass);
         break;
       }
       case OpCode::Inherit: {
-        if (!std::holds_alternative<ClassObj>(peek(1))) {
+        if (!std::holds_alternative<ObjClass*>(peek(1))) {
           runtime_error("superclass must be a class");
           return InterpretResult::RuntimeError;
         }
-        auto superclass = std::get<ClassObj>(peek(1));
-        auto subclass = std::get<ClassObj>(peek(0));
+        auto superclass = std::get<ObjClass*>(peek(1));
+        auto subclass = std::get<ObjClass*>(peek(0));
         for (const auto& [name, method] : superclass->methods) {
           subclass->methods[name] = method;
         }
@@ -470,8 +482,8 @@ InterpretResult VM::execute() {
       }
       case OpCode::Method: {
         std::string name = read_string();
-        auto method = std::get<ClosureObj>(peek(0));
-        auto klass = std::get<ClassObj>(peek(1));
+        auto* method = std::get<ObjClosure*>(peek(0));
+        auto* klass = std::get<ObjClass*>(peek(1));
         klass->methods[name] = method;
         pop();
         break;

@@ -1,0 +1,24 @@
+// Builds a reference cycle that pure reference counting could never reclaim,
+// drops every root to it, then asks the collector to sweep it. Run under the
+// bytecode engine, which owns its heap objects:
+//   ./build/lumen --engine=bytecode examples/gc_cycle.lum
+
+class Node {
+  init(name) {
+    this.name = name;
+    this.link = nil;
+  }
+}
+
+fun buildCycle() {
+  var first = Node("first");
+  var second = Node("second");
+  first.link = second;
+  second.link = first;  // first <-> second now reference each other
+  print first.name;
+  print first.link.name;
+}
+
+buildCycle();          // the cycle is unreachable once this returns
+var live = gc();       // mark-and-sweep reclaims it
+print "collected";

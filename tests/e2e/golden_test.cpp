@@ -68,3 +68,6 @@ TEST(Golden, Inheritance) {
 TEST(Golden, Mandelbrot) {
   check_example("mandelbrot");
 }
+TEST(Golden, GcCycle) {
+  check_example("gc_cycle");
+}
