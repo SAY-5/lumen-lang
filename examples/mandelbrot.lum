@@ -1,0 +1,31 @@
+// Renders a small ASCII Mandelbrot set. Each cell prints '*' if the point
+// escapes slowly (in the set) and ' ' otherwise, assembled row by row.
+fun glyph(iter, limit) {
+  if (iter >= limit) return "*";
+  if (iter > 5) return "+";
+  if (iter > 2) return ".";
+  return " ";
+}
+
+var rows = 16;
+var cols = 32;
+var limit = 30;
+
+for (var py = 0; py < rows; py = py + 1) {
+  var y0 = py / rows * 2 - 1;
+  var line = "";
+  for (var px = 0; px < cols; px = px + 1) {
+    var x0 = px / cols * 3 - 2;
+    var x = 0;
+    var y = 0;
+    var iter = 0;
+    while (x * x + y * y <= 4 and iter < limit) {
+      var xtemp = x * x - y * y + x0;
+      y = 2 * x * y + y0;
+      x = xtemp;
+      iter = iter + 1;
+    }
+    line = line + glyph(iter, limit);
+  }
+  print line;
+}

@@ -1,0 +1,24 @@
+class Animal {
+  init(name) {
+    this.name = name;
+  }
+  speak() {
+    return this.name + " makes a sound";
+  }
+}
+
+class Dog < Animal {
+  speak() {
+    return super.speak() + " (woof)";
+  }
+}
+
+class Puppy < Dog {
+  speak() {
+    return super.speak() + " (yip)";
+  }
+}
+
+print Animal("generic").speak();
+print Dog("Rex").speak();
+print Puppy("Bit").speak();

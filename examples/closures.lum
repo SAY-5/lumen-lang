@@ -1,0 +1,12 @@
+fun makeAdder(n) {
+  fun adder(x) {
+    return x + n;
+  }
+  return adder;
+}
+
+var add5 = makeAdder(5);
+var add10 = makeAdder(10);
+print add5(1);
+print add10(1);
+print add5(100);
