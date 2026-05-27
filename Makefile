@@ -1,7 +1,8 @@
-.PHONY: all build clean test e2e bench bench-regress fuzz fuzz-smoke fmt fmt-check asan tsan docker
+.PHONY: all build clean test e2e bench bench-smoke bench-regress fuzz fuzz-smoke fmt fmt-check asan tsan docker
 
 BUILD ?= build
 JOBS  ?= 4
+CLANG_FORMAT ?= clang-format
 
 all: build
 
@@ -24,8 +25,11 @@ bench: build
 	$(BUILD)/lumen_bench --json > bench/results/bench_local.json
 	@cat bench/results/bench_local.json
 
+bench-smoke: build
+	$(BUILD)/lumen_bench --smoke
+
 bench-regress: build
-	$(BUILD)/lumen_bench --check bench/results/bench_local.json --tolerance 0.30
+	$(BUILD)/lumen_bench --check bench/results/baseline.json --tolerance 0.30
 
 fuzz:
 	cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Debug -DLUMEN_FUZZ=ON -DCMAKE_CXX_COMPILER=clang++
@@ -36,10 +40,10 @@ fuzz-smoke: fuzz
 	build-fuzz/parser_fuzz -runs=5000 -max_len=512 fuzz-corpus
 
 fmt:
-	find src tests bench -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format -i
+	find src tests bench -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(CLANG_FORMAT) -i
 
 fmt-check:
-	find src tests bench -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format -n --Werror
+	find src tests bench -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 $(CLANG_FORMAT) -n --Werror
 
 docker:
 	docker build -t lumen-lang:local .

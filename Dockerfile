@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+      -DLUMEN_BUILD_TESTS=OFF -DLUMEN_BUILD_BENCH=OFF && \
     cmake --build build -j"$(nproc)" --target lumen
 
 FROM ubuntu:22.04 AS runtime

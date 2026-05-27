@@ -1,0 +1,123 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned clang-format
+        run: pipx install "clang-format==18.1.8"
+      - name: Show version
+        run: clang-format --version
+      - name: Check formatting
+        run: make fmt-check CLANG_FORMAT=clang-format
+
+  build-gcc:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y g++-12 cmake
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-12
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Run examples
+        run: |
+          for ex in examples/*.lum; do
+            echo "== $ex =="
+            ./build/lumen "$ex"
+          done
+
+  build-clang:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang-15 cmake
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-15
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  asan-ubsan:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang-15 cmake
+      - name: Configure
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DLUMEN_SANITIZE=ON -DCMAKE_CXX_COMPILER=clang++-15
+      - name: Build
+        run: cmake --build build-asan -j"$(nproc)"
+      - name: Test under sanitizers
+        # Leak detection is disabled: the tree-walking evaluator deliberately
+        # forms reference cycles (closures capture the environment that holds
+        # them), which are reclaimed at process exit. Reclaiming them at runtime
+        # is the job of the v4 mark-and-sweep collector. ASan memory-safety and
+        # UBSan checks remain fully active.
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build-asan --output-on-failure
+
+  fuzz-smoke:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang-15 cmake
+      - name: Build parser fuzzer
+        run: |
+          cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Debug -DLUMEN_FUZZ=ON \
+            -DLUMEN_BUILD_TESTS=OFF -DLUMEN_BUILD_BENCH=OFF \
+            -DCMAKE_CXX_COMPILER=clang++-15
+          cmake --build build-fuzz -j"$(nproc)" --target parser_fuzz
+      - name: Run fuzzer (5k iterations)
+        run: |
+          mkdir -p fuzz-corpus
+          ./build-fuzz/parser_fuzz -runs=5000 -max_len=512 fuzz-corpus
+
+  bench-smoke:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y g++-12 cmake
+      - name: Build benchmarks
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DLUMEN_BUILD_TESTS=OFF -DCMAKE_CXX_COMPILER=g++-12
+          cmake --build build -j"$(nproc)" --target lumen_bench
+      - name: Run bench smoke
+        run: ./build/lumen_bench --smoke
+
+  docker:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: lumen-lang:ci
