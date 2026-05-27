@@ -17,8 +17,19 @@ cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug -DLUMEN_COVERAGE=ON \
 cmake --build "$BUILD_DIR" -j"$(nproc 2>/dev/null || echo 4)"
 ctest --test-dir "$BUILD_DIR" --output-on-failure
 
-PCT=$(gcovr --root . --filter 'src/' --print-summary "$BUILD_DIR" 2>/dev/null |
-  awk '/^lines:/ {gsub(/%/,"",$2); print $2}')
+# Pick a gcov matching the compiler so the .gcda version is understood.
+GCOV_BIN=${GCOV:-gcov}
+case "${CXX:-g++}" in
+  *g++-12*) GCOV_BIN=gcov-12 ;;
+  *g++-13*) GCOV_BIN=gcov-13 ;;
+esac
+
+# Measure only the interpreter sources under src/. Print the full summary for
+# visibility, then extract the line-coverage percentage.
+SUMMARY=$(gcovr --root . --gcov-executable "$GCOV_BIN" \
+  --filter "$(pwd)/src/" --print-summary "$BUILD_DIR" 2>&1)
+echo "$SUMMARY"
+PCT=$(printf '%s\n' "$SUMMARY" | awk '/^lines:/ {gsub(/%/,"",$2); print $2; exit}')
 
 if [ -z "$PCT" ]; then
   echo "coverage: failed to parse gcovr output" >&2
