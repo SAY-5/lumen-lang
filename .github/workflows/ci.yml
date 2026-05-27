@@ -106,6 +106,19 @@ jobs:
       - name: Run bench smoke
         run: ./build/lumen_bench --smoke
 
+  coverage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-12 cmake gcovr
+      - name: Measure coverage and enforce gate
+        env:
+          CXX: g++-12
+        run: bash scripts/coverage.sh
+
   docker:
     runs-on: ubuntu-22.04
     steps:

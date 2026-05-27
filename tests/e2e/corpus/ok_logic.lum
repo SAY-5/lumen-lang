@@ -1,0 +1,5 @@
+print true and false;
+print true or false;
+print nil or "default";
+print 1 and 2;
+print false and 99;

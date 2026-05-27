@@ -1,0 +1,10 @@
+class Base {
+  init(v) { this.value = v; }
+  get() { return this.value; }
+}
+class Derived < Base {
+  doubled() { return this.get() * 2; }
+}
+var d = Derived(21);
+print d.get();
+print d.doubled();

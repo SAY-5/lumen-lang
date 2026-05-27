@@ -1,0 +1,13 @@
+class A {
+  init() { this.tag = "A"; }
+  chain() { return "A"; }
+}
+class B < A {
+  chain() { return "B<" + super.chain(); }
+}
+class C < B {
+  chain() { return "C<" + super.chain(); }
+}
+var c = C();
+print c.tag;
+print c.chain();

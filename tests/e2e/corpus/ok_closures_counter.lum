@@ -1,0 +1,14 @@
+fun makeCounter() {
+  var count = 0;
+  fun increment() {
+    count = count + 1;
+    return count;
+  }
+  return increment;
+}
+var c1 = makeCounter();
+var c2 = makeCounter();
+print c1();
+print c1();
+print c2();
+print c1();

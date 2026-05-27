@@ -1,0 +1,10 @@
+class Stack {
+  init() { this.top = nil; this.size = 0; }
+  push(v) { this.top = v; this.size = this.size + 1; }
+  peek() { return this.top; }
+}
+var s = Stack();
+s.push(1);
+s.push(2);
+print s.peek();
+print s.size;

@@ -15,8 +15,14 @@ add_compile_options(-Wall -Wextra -Wpedantic -Wshadow)
 option(LUMEN_SANITIZE "Enable ASan + UBSan" OFF)
 option(LUMEN_TSAN "Enable ThreadSanitizer" OFF)
 option(LUMEN_FUZZ "Enable libFuzzer build" OFF)
+option(LUMEN_COVERAGE "Enable gcov instrumentation" OFF)
 option(LUMEN_BUILD_TESTS "Build GoogleTest suite" ON)
 option(LUMEN_BUILD_BENCH "Build benchmark harness" ON)
+
+if(LUMEN_COVERAGE)
+  add_compile_options(--coverage -O0 -g)
+  add_link_options(--coverage)
+endif()
 
 if(LUMEN_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g)
@@ -80,6 +86,7 @@ if(LUMEN_BUILD_TESTS)
     target_compile_definitions(lumen_e2e_tests PRIVATE
       LUMEN_EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples"
       LUMEN_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/e2e/golden"
+      LUMEN_CORPUS_DIR="${CMAKE_SOURCE_DIR}/tests/e2e/corpus"
     )
     gtest_discover_tests(lumen_e2e_tests)
   endif()

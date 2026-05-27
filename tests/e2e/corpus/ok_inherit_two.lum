@@ -1,0 +1,8 @@
+class Animal {
+  init(name) { this.name = name; }
+  describe() { return this.name + " is an animal"; }
+}
+class Cat < Animal {
+  describe() { return super.describe() + " that meows"; }
+}
+print Cat("Felix").describe();

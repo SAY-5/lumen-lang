@@ -1,0 +1,11 @@
+class Multiplier {
+  init(factor) { this.factor = factor; }
+  build() {
+    fun apply(x) { return x * 3; }
+    return apply;
+  }
+}
+var m = Multiplier(3);
+var f = m.build();
+print f(5);
+print f(10);
